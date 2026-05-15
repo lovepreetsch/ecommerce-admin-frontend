@@ -1,11 +1,17 @@
+import { useEffect } from 'react';
 import { 
   DollarSign, 
   Users, 
   ShoppingBag, 
   TrendingUp,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Package
 } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchAllOrders } from '../store/slices/orderSlice';
+import { fetchProducts } from '../store/slices/productSlice';
+import { fetchAllUsers } from '../store/slices/userSlice';
 import { 
   AreaChart, 
   Area, 
@@ -28,11 +34,15 @@ const data = [
   { name: 'Jul', revenue: 3490, orders: 430 },
 ];
 
-const StatCard = ({ title, value, icon: Icon, trend, isPositive }) => (
+const StatCard = ({ title, value, icon: Icon, trend, isPositive, loading }) => (
   <div className="glass-panel p-6 rounded-xl flex items-start justify-between group hover:shadow-primary/5 transition-all duration-300">
     <div>
       <p className="text-textMuted text-sm font-medium mb-1">{title}</p>
-      <h3 className="text-2xl font-bold text-white mb-2">{value}</h3>
+      {loading ? (
+        <div className="h-8 w-24 bg-surfaceHover animate-pulse rounded mt-2"></div>
+      ) : (
+        <h3 className="text-2xl font-bold text-white mb-2">{value}</h3>
+      )}
       <div className={`flex items-center text-xs font-medium ${isPositive ? 'text-success' : 'text-danger'}`}>
         {isPositive ? <ArrowUpRight className="w-3 h-3 mr-1" /> : <ArrowDownRight className="w-3 h-3 mr-1" />}
         <span>{trend}</span>
@@ -46,6 +56,20 @@ const StatCard = ({ title, value, icon: Icon, trend, isPositive }) => (
 );
 
 export default function DashboardPage() {
+  const dispatch = useDispatch();
+  const { totalElements: totalOrders, items: recentOrders, loading: ordersLoading } = useSelector(state => state.orders);
+  const { totalElements: totalProducts, loading: productsLoading } = useSelector(state => state.products);
+  const { items: users, loading: usersLoading } = useSelector(state => state.users);
+
+  useEffect(() => {
+    dispatch(fetchAllOrders({ page: 0, size: 5 }));
+    dispatch(fetchProducts({ page: 0, size: 1 }));
+    dispatch(fetchAllUsers({ page: 0, size: 50 }));
+  }, [dispatch]);
+
+  const totalRevenue = recentOrders.reduce((acc, order) => acc + (order.totalAmount || 0), 0);
+  const activeUsersCount = users.length;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -60,14 +84,13 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Revenue" value="$45,231.89" icon={DollarSign} trend="+20.1%" isPositive={true} />
-        <StatCard title="Active Users" value="2,350" icon={Users} trend="+15.2%" isPositive={true} />
-        <StatCard title="Total Orders" value="12,234" icon={ShoppingBag} trend="+12.4%" isPositive={true} />
-        <StatCard title="Bounce Rate" value="4.23%" icon={TrendingUp} trend="-2.4%" isPositive={false} />
+        <StatCard title="Revenue (Recent)" value={`₹${totalRevenue.toLocaleString()}`} icon={DollarSign} trend="+12.5%" isPositive={true} loading={ordersLoading} />
+        <StatCard title="Total Users" value={activeUsersCount} icon={Users} trend="+5.2%" isPositive={true} loading={usersLoading} />
+        <StatCard title="Total Orders" value={totalOrders} icon={ShoppingBag} trend="+18.4%" isPositive={true} loading={ordersLoading} />
+        <StatCard title="Total Products" value={totalProducts} icon={Package} trend="+2.1%" isPositive={true} loading={productsLoading} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chart */}
         <div className="glass-panel p-6 rounded-xl lg:col-span-2">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-white">Revenue Analytics</h2>
@@ -87,7 +110,7 @@ export default function DashboardPage() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value}`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }}
                   itemStyle={{ color: '#fff' }}
@@ -98,7 +121,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Secondary Chart */}
         <div className="glass-panel p-6 rounded-xl">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-white">Orders Status</h2>
@@ -120,7 +142,6 @@ export default function DashboardPage() {
         </div>
       </div>
       
-      {/* Recent Orders Table Skeleton Placeholder */}
       <div className="glass-panel p-6 rounded-xl">
         <h2 className="text-lg font-bold text-white mb-6">Recent Orders</h2>
         <div className="overflow-x-auto">
@@ -128,26 +149,32 @@ export default function DashboardPage() {
             <thead>
               <tr className="border-b border-surfaceHover text-sm text-textMuted">
                 <th className="pb-3 font-medium px-4">Order ID</th>
-                <th className="pb-3 font-medium px-4">Customer</th>
+                <th className="pb-3 font-medium px-4">Customer ID</th>
                 <th className="pb-3 font-medium px-4">Date</th>
                 <th className="pb-3 font-medium px-4">Amount</th>
-                <th className="pb-3 font-medium px-4">Status</th>
+                <th className="pb-3 font-medium px-4 text-right">Status</th>
               </tr>
             </thead>
             <tbody>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <tr key={i} className="border-b border-surfaceHover/50 hover:bg-surfaceHover/30 transition-colors">
-                  <td className="py-4 px-4 text-sm text-white font-medium">#ORD-{9000 + i}</td>
-                  <td className="py-4 px-4 text-sm text-textMuted">User {i}</td>
-                  <td className="py-4 px-4 text-sm text-textMuted">Today, 10:{i}0 AM</td>
-                  <td className="py-4 px-4 text-sm text-white font-medium">${((i * 123.45) % 500).toFixed(2)}</td>
-                  <td className="py-4 px-4">
-                    <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-success/10 text-success border border-success/20">
-                      Completed
+              {ordersLoading && <tr><td colSpan="5" className="py-8 text-center text-textMuted">Loading recent orders...</td></tr>}
+              {!ordersLoading && recentOrders.map((order) => (
+                <tr key={order.id} className="border-b border-surfaceHover/50 hover:bg-surfaceHover/30 transition-colors">
+                  <td className="py-4 px-4 text-sm text-white font-medium">#{order.orderNumber}</td>
+                  <td className="py-4 px-4 text-sm text-textMuted">User #{order.userId}</td>
+                  <td className="py-4 px-4 text-sm text-textMuted">{new Date(order.orderDate).toLocaleDateString()}</td>
+                  <td className="py-4 px-4 text-sm text-white font-medium">₹{order.totalAmount?.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-right">
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${
+                      order.status === 'DELIVERED' ? 'bg-success/10 text-success border-success/20' : 
+                      order.status === 'CANCELLED' ? 'bg-danger/10 text-danger border-danger/20' : 
+                      'bg-warning/10 text-warning border-warning/20'
+                    }`}>
+                      {order.status}
                     </span>
                   </td>
                 </tr>
               ))}
+              {!ordersLoading && recentOrders.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-textMuted">No recent orders.</td></tr>}
             </tbody>
           </table>
         </div>

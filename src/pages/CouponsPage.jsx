@@ -1,25 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Ticket, Eye } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchCoupons, createCoupon, updateCoupon, deleteCoupon } from '../store/slices/couponSlice';
 import Modal from '../components/ui/Modal';
 import { toast } from 'react-toastify';
 
-const INITIAL_COUPONS = [
-  { id: 1, code: 'SUMMER20', discount: 20, type: 'Percentage', maxUses: 500, used: 145, status: 'Active', expiry: '2023-12-31' },
-  { id: 2, code: 'WELCOME10', discount: 10, type: 'Fixed Amount', maxUses: 1000, used: 890, status: 'Active', expiry: '2024-06-30' },
-  { id: 3, code: 'FLASHSALE', discount: 50, type: 'Percentage', maxUses: 100, used: 100, status: 'Expired', expiry: '2023-10-01' },
-];
-
 export default function CouponsPage() {
-  const [coupons, setCoupons] = useState(INITIAL_COUPONS);
+  const dispatch = useDispatch();
+  const { items: coupons, loading } = useSelector((state) => state.coupons);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('add');
+  const [modalMode, setModalMode] = useState('add'); // 'add', 'edit', 'view', 'delete'
   const [selectedCoupon, setSelectedCoupon] = useState(null);
+
+  useEffect(() => {
+    dispatch(fetchCoupons());
+  }, [dispatch]);
 
   const handleOpenModal = (mode, coupon = null) => {
     setModalMode(mode);
-    setSelectedCoupon(coupon || { code: '', discount: '', type: 'Percentage', maxUses: '', status: 'Active', expiry: '' });
+    setSelectedCoupon(coupon || { code: '', discount: 0, type: 'PERCENTAGE', maxUses: 0, expiryDate: '', active: true });
     setIsModalOpen(true);
   };
 
@@ -29,23 +30,30 @@ export default function CouponsPage() {
     setIsModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    setCoupons(coupons.filter(c => c.id !== selectedCoupon.id));
-    toast.success('Coupon deleted successfully');
-    setIsModalOpen(false);
+  const confirmDelete = async () => {
+    try {
+      await dispatch(deleteCoupon(selectedCoupon.id)).unwrap();
+      toast.success('Coupon deleted successfully');
+      setIsModalOpen(false);
+    } catch (err) {
+      toast.error('Failed to delete coupon');
+    }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (modalMode === 'add') {
-      const newId = coupons.length ? Math.max(...coupons.map(c => c.id)) + 1 : 1;
-      setCoupons([...coupons, { ...selectedCoupon, id: newId, used: 0 }]);
-      toast.success('Coupon added successfully');
-    } else if (modalMode === 'edit') {
-      setCoupons(coupons.map(c => c.id === selectedCoupon.id ? selectedCoupon : c));
-      toast.success('Coupon updated successfully');
+    try {
+      if (modalMode === 'add') {
+        await dispatch(createCoupon(selectedCoupon)).unwrap();
+        toast.success('Coupon added successfully');
+      } else if (modalMode === 'edit') {
+        await dispatch(updateCoupon({ id: selectedCoupon.id, couponData: selectedCoupon })).unwrap();
+        toast.success('Coupon updated successfully');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to save coupon');
     }
-    setIsModalOpen(false);
   };
 
   const filteredCoupons = coupons.filter(c => c.code.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -79,11 +87,11 @@ export default function CouponsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><p className="text-sm text-textMuted">Coupon Code</p><p className="font-medium text-white">{selectedCoupon.code}</p></div>
-            <div><p className="text-sm text-textMuted">Status</p><span className={`inline-block mt-1 px-2.5 py-1 text-xs font-medium rounded-full ${selectedCoupon.status === 'Active' ? 'bg-success/10 text-success border border-success/20' : 'bg-danger/10 text-danger border border-danger/20'}`}>{selectedCoupon.status}</span></div>
-            <div><p className="text-sm text-textMuted">Discount Value</p><p className="font-medium text-white">{selectedCoupon.type === 'Percentage' ? `${selectedCoupon.discount}%` : `$${selectedCoupon.discount}`}</p></div>
+            <div><p className="text-sm text-textMuted">Status</p><span className={`inline-block mt-1 px-2.5 py-1 text-xs font-medium rounded-full ${selectedCoupon.active ? 'bg-success/10 text-success border border-success/20' : 'bg-danger/10 text-danger border border-danger/20'}`}>{selectedCoupon.active ? 'Active' : 'Inactive'}</span></div>
+            <div><p className="text-sm text-textMuted">Discount Value</p><p className="font-medium text-white">{selectedCoupon.type === 'PERCENTAGE' ? `${selectedCoupon.discount}%` : `$${selectedCoupon.discount}`}</p></div>
             <div><p className="text-sm text-textMuted">Discount Type</p><p className="font-medium text-white">{selectedCoupon.type}</p></div>
-            <div><p className="text-sm text-textMuted">Usage</p><p className="font-medium text-white">{selectedCoupon.used} / {selectedCoupon.maxUses}</p></div>
-            <div><p className="text-sm text-textMuted">Expiry Date</p><p className="font-medium text-white">{selectedCoupon.expiry}</p></div>
+            <div><p className="text-sm text-textMuted">Usage Count</p><p className="font-medium text-white">{selectedCoupon.usedCount || 0} / {selectedCoupon.maxUses}</p></div>
+            <div><p className="text-sm text-textMuted">Expiry Date</p><p className="font-medium text-white">{selectedCoupon.expiryDate}</p></div>
           </div>
           <div className="pt-6 flex justify-end">
             <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-surfaceHover text-white rounded-lg hover:bg-surfaceHover/80">Close</button>
@@ -102,7 +110,8 @@ export default function CouponsPage() {
           <div>
             <label className="block text-sm font-medium text-textMuted mb-1">Discount Type</label>
             <select value={selectedCoupon.type} onChange={e => setSelectedCoupon({...selectedCoupon, type: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none">
-              <option>Percentage</option><option>Fixed Amount</option>
+              <option value="PERCENTAGE">Percentage</option>
+              <option value="FIXED_AMOUNT">Fixed Amount</option>
             </select>
           </div>
           <div>
@@ -115,12 +124,18 @@ export default function CouponsPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-textMuted mb-1">Expiry Date</label>
-            <input required type="date" value={selectedCoupon.expiry} onChange={e => setSelectedCoupon({...selectedCoupon, expiry: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none" />
+            <input required type="date" value={selectedCoupon.expiryDate} onChange={e => setSelectedCoupon({...selectedCoupon, expiryDate: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none" />
           </div>
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <input type="checkbox" id="coupon-active" checked={selectedCoupon.active} onChange={e => setSelectedCoupon({...selectedCoupon, active: e.target.checked})} className="w-4 h-4 rounded border-surfaceHover bg-background text-primary" />
+          <label htmlFor="coupon-active" className="text-sm font-medium text-white">Active</label>
         </div>
         <div className="pt-4 flex justify-end gap-3 border-t border-surfaceHover mt-6">
           <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-surfaceHover text-textMuted rounded-lg hover:bg-surfaceHover">Cancel</button>
-          <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">Save Coupon</button>
+          <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50">
+            {loading ? 'Saving...' : 'Save Coupon'}
+          </button>
         </div>
       </form>
     );
@@ -165,7 +180,9 @@ export default function CouponsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredCoupons.map((coupon) => (
+              {loading && coupons.length === 0 ? (
+                <tr><td colSpan="6" className="py-12 text-center text-textMuted">Loading coupons...</td></tr>
+              ) : filteredCoupons.map((coupon) => (
                 <tr key={coupon.id} className="border-b border-surfaceHover/50 hover:bg-surfaceHover/30 transition-colors group">
                   <td className="py-4 px-6">
                     <span className="font-mono text-sm font-bold tracking-wider text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20">
@@ -173,15 +190,15 @@ export default function CouponsPage() {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-sm font-medium text-white">
-                    {coupon.type === 'Percentage' ? `${coupon.discount}% OFF` : `$${coupon.discount} OFF`}
+                    {coupon.type === 'PERCENTAGE' ? `${coupon.discount}% OFF` : `$${coupon.discount} OFF`}
                   </td>
                   <td className="py-4 px-6 text-sm text-textMuted">
-                    {coupon.used} / {coupon.maxUses}
+                    {coupon.usedCount || 0} / {coupon.maxUses}
                   </td>
-                  <td className="py-4 px-6 text-sm text-textMuted">{coupon.expiry}</td>
+                  <td className="py-4 px-6 text-sm text-textMuted">{coupon.expiryDate}</td>
                   <td className="py-4 px-6">
-                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${coupon.status === 'Active' ? 'text-success bg-success/10 border-success/20' : 'text-danger bg-danger/10 border-danger/20'} border`}>
-                      {coupon.status}
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${coupon.active ? 'text-success bg-success/10 border-success/20' : 'text-danger bg-danger/10 border-danger/20'} border`}>
+                      {coupon.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="py-4 px-6">
@@ -199,7 +216,7 @@ export default function CouponsPage() {
                   </td>
                 </tr>
               ))}
-              {filteredCoupons.length === 0 && <tr><td colSpan="6" className="py-12 text-center text-textMuted">No coupons found.</td></tr>}
+              {!loading && filteredCoupons.length === 0 && <tr><td colSpan="6" className="py-12 text-center text-textMuted">No coupons found.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -1,25 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, FolderTree, Eye } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchCategories, createCategory, updateCategory, deleteCategory } from '../store/slices/categorySlice';
 import Modal from '../components/ui/Modal';
 import { toast } from 'react-toastify';
 
-const INITIAL_CATEGORIES = [
-  { id: 1, name: 'Electronics', description: 'Gadgets, devices, and accessories', productCount: 145, active: true },
-  { id: 2, name: 'Furniture', description: 'Home and office furniture', productCount: 89, active: true },
-  { id: 3, name: 'Clothing', description: 'Men and women apparel', productCount: 320, active: true },
-];
-
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  const dispatch = useDispatch();
+  const { items: categories, loading } = useSelector((state) => state.categories);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('add');
+  const [modalMode, setModalMode] = useState('add'); // 'add', 'edit', 'view', 'delete'
   const [selectedCategory, setSelectedCategory] = useState(null);
+
+  useEffect(() => {
+    dispatch(fetchCategories());
+  }, [dispatch]);
 
   const handleOpenModal = (mode, category = null) => {
     setModalMode(mode);
-    setSelectedCategory(category || { name: '', description: '', active: true, productCount: 0 });
+    setSelectedCategory(category || { name: '', description: '', slug: '', active: true });
     setIsModalOpen(true);
   };
 
@@ -29,23 +30,30 @@ export default function CategoriesPage() {
     setIsModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    setCategories(categories.filter(c => c.id !== selectedCategory.id));
-    toast.success('Category deleted successfully');
-    setIsModalOpen(false);
+  const confirmDelete = async () => {
+    try {
+      await dispatch(deleteCategory(selectedCategory.id)).unwrap();
+      toast.success('Category deleted successfully');
+      setIsModalOpen(false);
+    } catch (err) {
+      toast.error('Failed to delete category');
+    }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (modalMode === 'add') {
-      const newId = categories.length ? Math.max(...categories.map(c => c.id)) + 1 : 1;
-      setCategories([...categories, { ...selectedCategory, id: newId }]);
-      toast.success('Category added successfully');
-    } else if (modalMode === 'edit') {
-      setCategories(categories.map(c => c.id === selectedCategory.id ? selectedCategory : c));
-      toast.success('Category updated successfully');
+    try {
+      if (modalMode === 'add') {
+        await dispatch(createCategory(selectedCategory)).unwrap();
+        toast.success('Category added successfully');
+      } else if (modalMode === 'edit') {
+        await dispatch(updateCategory({ id: selectedCategory.id, categoryData: selectedCategory })).unwrap();
+        toast.success('Category updated successfully');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to save category');
     }
-    setIsModalOpen(false);
   };
 
   const renderModalContent = () => {
@@ -77,10 +85,9 @@ export default function CategoriesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><p className="text-sm text-textMuted">Category ID</p><p className="font-medium text-white">#{selectedCategory.id}</p></div>
-            <div><p className="text-sm text-textMuted">Status</p><p className="font-medium text-white">{selectedCategory.active ? 'Active' : 'Hidden'}</p></div>
+            <div><p className="text-sm text-textMuted">Slug</p><p className="font-medium text-white">{selectedCategory.slug}</p></div>
             <div className="col-span-2"><p className="text-sm text-textMuted">Name</p><p className="font-medium text-white">{selectedCategory.name}</p></div>
             <div className="col-span-2"><p className="text-sm text-textMuted">Description</p><p className="text-sm text-white mt-1 bg-surfaceHover/50 p-3 rounded-lg">{selectedCategory.description}</p></div>
-            <div><p className="text-sm text-textMuted">Products Associated</p><p className="font-medium text-white">{selectedCategory.productCount} items</p></div>
           </div>
           <div className="pt-6 flex justify-end">
             <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-surfaceHover text-white rounded-lg hover:bg-surfaceHover/80">Close</button>
@@ -96,16 +103,18 @@ export default function CategoriesPage() {
           <input required type="text" value={selectedCategory.name} onChange={e => setSelectedCategory({...selectedCategory, name: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none" />
         </div>
         <div>
+          <label className="block text-sm font-medium text-textMuted mb-1">Slug</label>
+          <input type="text" value={selectedCategory.slug} onChange={e => setSelectedCategory({...selectedCategory, slug: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none" placeholder="auto-generated if empty" />
+        </div>
+        <div>
           <label className="block text-sm font-medium text-textMuted mb-1">Description</label>
           <textarea rows="3" value={selectedCategory.description} onChange={e => setSelectedCategory({...selectedCategory, description: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none"></textarea>
         </div>
-        <div className="flex items-center gap-2 mt-4">
-          <input type="checkbox" id="active" checked={selectedCategory.active} onChange={e => setSelectedCategory({...selectedCategory, active: e.target.checked})} className="w-4 h-4 rounded border-surfaceHover bg-background text-primary focus:ring-primary/50" />
-          <label htmlFor="active" className="text-sm font-medium text-white">Active (Visible in store)</label>
-        </div>
         <div className="pt-4 flex justify-end gap-3 border-t border-surfaceHover mt-6">
           <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-surfaceHover text-textMuted rounded-lg hover:bg-surfaceHover">Cancel</button>
-          <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">Save Category</button>
+          <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50">
+            {loading ? 'Saving...' : 'Save Category'}
+          </button>
         </div>
       </form>
     );
@@ -139,7 +148,9 @@ export default function CategoriesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCategories.map((category) => (
+        {loading && categories.length === 0 ? (
+          <div className="col-span-3 text-center py-12 text-textMuted">Loading categories...</div>
+        ) : filteredCategories.map((category) => (
           <div key={category.id} className="glass-panel p-6 rounded-xl hover:shadow-primary/5 transition-all duration-300 group">
             <div className="flex justify-between items-start mb-4">
               <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
@@ -160,16 +171,16 @@ export default function CategoriesPage() {
             
             <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
               {category.name}
-              {!category.active && <span className="text-[10px] uppercase tracking-wider bg-surfaceHover text-textMuted px-2 py-0.5 rounded-full">Hidden</span>}
             </h3>
             <p className="text-sm text-textMuted mb-6 line-clamp-2 min-h-[40px]">{category.description}</p>
             
             <div className="pt-4 border-t border-surfaceHover flex justify-between items-center">
-              <span className="text-sm font-medium text-white">{category.productCount} Products</span>
+              <span className="text-xs text-textMuted font-mono">ID: #{category.id}</span>
+              <span className="text-xs text-textMuted font-mono">{category.slug}</span>
             </div>
           </div>
         ))}
-        {filteredCategories.length === 0 && <div className="col-span-3 text-center py-12 text-textMuted">No categories found.</div>}
+        {!loading && filteredCategories.length === 0 && <div className="col-span-3 text-center py-12 text-textMuted">No categories found.</div>}
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'add' ? 'Add Category' : modalMode === 'edit' ? 'Edit Category' : modalMode === 'delete' ? 'Confirm Deletion' : 'Category Details'}>

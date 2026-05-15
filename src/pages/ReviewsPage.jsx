@@ -1,25 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Eye, Trash2, Edit, Star, StarHalf } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchAllReviews, updateReviewStatus, deleteReview } from '../store/slices/reviewSlice';
 import Modal from '../components/ui/Modal';
 import { toast } from 'react-toastify';
 
-const INITIAL_REVIEWS = [
-  { id: 1, product: 'Wireless Headphones', user: 'Alice Johnson', rating: 5, comment: 'Excellent sound quality and battery life!', date: '2023-10-20', status: 'Approved' },
-  { id: 2, product: 'Ergonomic Chair', user: 'Bob Smith', rating: 3, comment: 'Good but assembling was a bit difficult.', date: '2023-10-22', status: 'Pending' },
-  { id: 3, product: 'Gaming Keyboard', user: 'Charlie Brown', rating: 1, comment: 'Keys started sticking after a week.', date: '2023-10-23', status: 'Rejected' },
-];
-
 export default function ReviewsPage() {
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  const dispatch = useDispatch();
+  const { items: reviews, loading } = useSelector((state) => state.reviews);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('view');
+  const [modalMode, setModalMode] = useState('view'); // 'view', 'edit', 'delete'
   const [selectedReview, setSelectedReview] = useState(null);
+
+  useEffect(() => {
+    dispatch(fetchAllReviews());
+  }, [dispatch]);
 
   const handleOpenModal = (mode, review = null) => {
     setModalMode(mode);
-    setSelectedReview(review || { product: '', user: '', rating: 5, comment: '', status: 'Pending', date: new Date().toISOString().split('T')[0] });
+    setSelectedReview(review);
     setIsModalOpen(true);
   };
 
@@ -29,19 +30,28 @@ export default function ReviewsPage() {
     setIsModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    setReviews(reviews.filter(r => r.id !== selectedReview.id));
-    toast.success('Review deleted successfully');
-    setIsModalOpen(false);
+  const confirmDelete = async () => {
+    try {
+      await dispatch(deleteReview(selectedReview.id)).unwrap();
+      toast.success('Review deleted successfully');
+      setIsModalOpen(false);
+    } catch (err) {
+      toast.error('Failed to delete review');
+    }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (modalMode === 'edit') {
-      setReviews(reviews.map(r => r.id === selectedReview.id ? selectedReview : r));
-      toast.success('Review updated successfully');
+    try {
+      await dispatch(updateReviewStatus({ 
+        id: selectedReview.id, 
+        status: selectedReview.status 
+      })).unwrap();
+      toast.success('Review status updated successfully');
+      setIsModalOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to update review');
     }
-    setIsModalOpen(false);
   };
 
   const renderStars = (rating) => {
@@ -56,13 +66,16 @@ export default function ReviewsPage() {
 
   const getStatusBadge = (status) => {
     switch (status) {
-      case 'Approved': return 'bg-success/10 text-success border-success/20';
-      case 'Rejected': return 'bg-danger/10 text-danger border-danger/20';
+      case 'APPROVED': return 'bg-success/10 text-success border-success/20';
+      case 'REJECTED': return 'bg-danger/10 text-danger border-danger/20';
       default: return 'bg-warning/10 text-warning border-warning/20';
     }
   };
 
-  const filteredReviews = reviews.filter(r => r.product.toLowerCase().includes(searchTerm.toLowerCase()) || r.user.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredReviews = reviews.filter(r => 
+    r.productName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    r.userEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const renderModalContent = () => {
     if (modalMode === 'delete') {
@@ -89,15 +102,15 @@ export default function ReviewsPage() {
           <div className="flex justify-between items-center pb-4 border-b border-surfaceHover">
             <div>
               <p className="text-sm text-textMuted">Product</p>
-              <p className="text-lg font-bold text-white">{selectedReview.product}</p>
+              <p className="text-lg font-bold text-white">{selectedReview.productName || `Product #${selectedReview.productId}`}</p>
             </div>
             <div className="text-right">
               <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${getStatusBadge(selectedReview.status)}`}>{selectedReview.status}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><p className="text-sm text-textMuted">Customer</p><p className="font-medium text-white">{selectedReview.user}</p></div>
-            <div><p className="text-sm text-textMuted">Date</p><p className="font-medium text-white">{selectedReview.date}</p></div>
+            <div><p className="text-sm text-textMuted">Customer Email</p><p className="font-medium text-white">{selectedReview.userEmail || `User #${selectedReview.userId}`}</p></div>
+            <div><p className="text-sm text-textMuted">Date</p><p className="font-medium text-white">{selectedReview.createdAt || 'N/A'}</p></div>
             <div className="col-span-2">
               <p className="text-sm text-textMuted mb-1">Rating</p>
               {renderStars(selectedReview.rating)}
@@ -121,12 +134,16 @@ export default function ReviewsPage() {
         <div>
           <label className="block text-sm font-medium text-textMuted mb-1">Status</label>
           <select value={selectedReview.status} onChange={e => setSelectedReview({...selectedReview, status: e.target.value})} className="w-full px-4 py-2 bg-background border border-surfaceHover rounded-lg text-white focus:ring-2 focus:ring-primary/50 outline-none">
-            <option>Approved</option><option>Pending</option><option>Rejected</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
           </select>
         </div>
         <div className="pt-4 flex justify-end gap-3 border-t border-surfaceHover mt-6">
           <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-surfaceHover text-textMuted rounded-lg hover:bg-surfaceHover">Cancel</button>
-          <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">Save Changes</button>
+          <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50">
+            {loading ? 'Saving...' : 'Save Changes'}
+          </button>
         </div>
       </form>
     );
@@ -146,7 +163,7 @@ export default function ReviewsPage() {
           <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-textMuted" />
           <input 
             type="text" 
-            placeholder="Search by product or customer..." 
+            placeholder="Search by product or email..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-background border border-surfaceHover rounded-lg text-sm text-white placeholder-textMuted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
@@ -167,10 +184,12 @@ export default function ReviewsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredReviews.map((review) => (
+              {loading && reviews.length === 0 ? (
+                <tr><td colSpan="5" className="py-12 text-center text-textMuted">Loading reviews...</td></tr>
+              ) : filteredReviews.map((review) => (
                 <tr key={review.id} className="border-b border-surfaceHover/50 hover:bg-surfaceHover/30 transition-colors group">
-                  <td className="py-4 px-6"><span className="text-sm font-medium text-white">{review.product}</span></td>
-                  <td className="py-4 px-6 text-sm text-textMuted">{review.user}</td>
+                  <td className="py-4 px-6"><span className="text-sm font-medium text-white">{review.productName || `Product #${review.productId}`}</span></td>
+                  <td className="py-4 px-6 text-sm text-textMuted">{review.userEmail || `User #${review.userId}`}</td>
                   <td className="py-4 px-6">{renderStars(review.rating)}</td>
                   <td className="py-4 px-6">
                     <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${getStatusBadge(review.status)}`}>
@@ -192,7 +211,7 @@ export default function ReviewsPage() {
                   </td>
                 </tr>
               ))}
-              {filteredReviews.length === 0 && <tr><td colSpan="5" className="py-12 text-center text-textMuted">No reviews found.</td></tr>}
+              {!loading && filteredReviews.length === 0 && <tr><td colSpan="5" className="py-12 text-center text-textMuted">No reviews found.</td></tr>}
             </tbody>
           </table>
         </div>

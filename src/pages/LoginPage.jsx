@@ -17,24 +17,13 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Demo credentials bypass
-      if (email === 'admin@shopverse.com' && password === 'admin123') {
-        dispatch(loginSuccess({
-          user: { email, roles: ['ROLE_ADMIN'] },
-          token: 'demo-admin-token'
-        }));
-        toast.success('Login successful (Demo Mode)!');
-        navigate('/dashboard');
-        setLoading(false);
-        return;
-      }
-
       // Actual API call
       const res = await API.post('/auth/login', { email, password });
       
-      // Ensure user is an admin
       const roles = res.data.data.roles || [];
-      if (!roles.includes('ROLE_ADMIN')) {
+      const isAdmin = roles.some(role => role === 'ROLE_ADMIN' || role === 'ADMIN');
+      
+      if (!isAdmin) {
         toast.error('Unauthorized access. Admins only.');
         setLoading(false);
         return;
@@ -47,7 +36,7 @@ export default function LoginPage() {
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      toast.error(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
